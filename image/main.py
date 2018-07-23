@@ -68,9 +68,9 @@ def txt2img(name):
     val val...
     output: an image
     '''
-    data = load_txt_nchw(name+".txt")
+    data = load_txt_nchw("data/"+name+".txt")
     data = data.transpose(1, 2, 0)
-    io.imsave(name+".jpg", data)
+    io.imsave("data/"+name+".jpg", data)
 
 def img2txt(name):
     '''
@@ -79,9 +79,9 @@ def img2txt(name):
     n c h w
     uint8 uint8...
     '''
-    data = io.imread(name+".jpg")
+    data = io.imread("data/"+name+".jpg")
     [h, w, c] = data.shape
-    save_txt_nchw(name+".txt", data, 1, c, h, w)
+    save_txt_nchw("data/"+name+".txt", data, 1, c, h, w)
 
 def resize(filename, H, W):
     '''
@@ -90,7 +90,7 @@ def resize(filename, H, W):
     '''
     if not os.path.exists("resize"):
         os.mkdir("resize")
-    data = io.imread(filename)
+    data = io.imread("data/"+filename)
     [h, w, c] = data.shape
     new_data = transform.resize(data,(H, W), mode='reflect', preserve_range=True).astype(np.uint8)
     save_txt_nchw("resize/"+str(H)+"-"+str(W)+".txt", new_data, 1, c, H, W)
@@ -104,7 +104,7 @@ def shuffle_rgb(filename):
     if not os.path.exists("RGB"):
         os.mkdir("RGB")
 
-    data = io.imread(filename)
+    data = io.imread("data/"+filename)
     [h, w, c] = data.shape
     print("------------")
     print("input size :", data.shape)
@@ -142,6 +142,21 @@ def rotate(x, y, ang):
     sin, cos = math.sin(radian(ang)), math.cos(radian(ang))
     return x*cos - y*sin, x*sin + y*cos
 
+def interpolation(x, y, data, mode):
+    if mode=="nn":
+        x, y = round(x), round(y)
+        res = data[y,x,:]
+    elif mode=="bilinear":
+        x0, x1 = math.floor(x), math.ceil(x)
+        y0, y1 = math.floor(y), math.ceil(y)
+        py0 = (x-x0)*(data[y0,x1,:] - data[y0,x0,:]) + data[y0,x0,:]
+        py1 = (x-x0)*(data[y1,x1,:] - data[y1,x0,:]) + data[y1,x0,:]
+        res = (y-y0)*(py1 - py0) + py0
+    else:
+        print("mode not valid!")
+        exit()
+    return res
+
 def img_rotate_forward(filename, ang):
     '''
     w => x
@@ -166,21 +181,6 @@ def img_rotate_forward(filename, ang):
 
     io.imsave("rotate/"+str(ang)+"-forward.jpg", new_data)
 
-def interpolation(x, y, data, mode):
-    if mode=="nn":
-        x, y = round(x), round(y)
-        res = data[y,x,:]
-    elif mode=="bilinear":
-        x0, x1 = math.floor(x), math.ceil(x)
-        y0, y1 = math.floor(y), math.ceil(y)
-        py0 = (x-x0)*(data[y0,x1,:] - data[y0,x0,:]) + data[y0,x0,:]
-        py1 = (x-x0)*(data[y1,x1,:] - data[y1,x0,:]) + data[y1,x0,:]
-        res = (y-y0)*(py1 - py0) + py0
-    else:
-        print("mode not valid!")
-        exit()
-    return res
-
 def img_rotate_backward(filename, ang, mode):
     '''
     w => x
@@ -191,13 +191,12 @@ def img_rotate_backward(filename, ang, mode):
         os.mkdir("rotate")
     sin, cos = math.sin(radian(ang)), math.cos(radian(ang))
 
-    data = io.imread(filename).astype(float)    # float is importent for interpolation!!!
+    data = io.imread("data/"+filename).astype(float)    # float is importent for interpolation!!!
     [H, W, c] = data.shape
     print("input image size: h=%d, w=%d" % (H, W))
     W0 = math.ceil(abs(H*sin) + abs(W*cos))
     H0 = math.ceil(abs(H*cos) + abs(W*sin))
     print("output image size: h=%d, w=%d" % (H0, W0))
-    # new_data = np.ones((H0, W0, c), dtype=np.uint8)*255
     new_data = np.ones((H0, W0, c), dtype=np.uint8)*255
     
     time_start = time.time()
@@ -211,14 +210,52 @@ def img_rotate_backward(filename, ang, mode):
     print("time cost: %.2f" % (time_end - time_start))
     io.imsave("rotate/"+str(ang)+"-backward-"+mode+".jpg", new_data)
 
+def invertRB(filename):
+    '''
+    input: txt data(RGB or BGR)
+    n c h w
+    val val...
+    output: txt data and image(BGR or RGB)
+    '''
+    if not os.path.exists("invertRB"):
+        os.mkdir("invertRB")
+
+    data = load_txt_nchw("data/"+filename)
+    data = data.transpose(1, 2, 0)
+    [h, w, c] = data.shape
+    new_data = np.append(np.append(data[:,:,2], data[:,:,1]), data[:,:,0]).reshape(c, h, w).transpose(1, 2, 0)
+    save_txt_nchw("invertRB/origin.txt", data, 1, c, h, w)
+    save_txt_nchw("invertRB/invert.txt", new_data, 1, c, h, w)
+    io.imsave("invertRB/origin.jpg", data)
+    io.imsave("invertRB/invert.jpg", new_data)
+
+def txt_equal(file1, file2):
+    '''
+    input: two txt data
+    n c h w
+    val val...
+    output: euqal or not
+    '''
+    data1 = load_txt_nchw(file1)
+    data2 = load_txt_nchw(file2)
+    [C, H, W] = data1.shape
+    for c in range(C):
+        for h in range(H):
+            for w in range(W):
+                if not data1[c,h,w] == data2[c,h,w]:
+                    print("%s and %s are not equal." % (file1, file2))
+                    idx = c*H*W + h*W + w
+                    print("c=%d, h=%d, w=%d" % (c, h, w))
+                    print("idx=%f, data1=%f, data2=%f" % (idx, data1[c,h,w], data2[c,h,w]))
+                    return
+    print("%s and %s are equal." % (file1, file2))
+
 def main():
-    # txt2img("float")
-    # txt2img("int")
-    # img2txt("1200-1920")
-    # resize("1200-1920.jpg", 480, 640)
-    # shuffle_rgb("1200-1920.jpg")
-    # img_rotate_forward("1200-1920.jpg", 30)
-    # img_rotate_forward("1200-1920.jpg", -30)
+    img2txt("Lenna")
+    txt2img("Lenna")
+    resize("Lenna.jpg", 480, 640)
+    invertRB("Lenna.txt")
+    shuffle_rgb("Lenna.jpg")
     img_rotate_backward("Lenna.jpg", 30, "nn")
     img_rotate_backward("Lenna.jpg", 30, "bilinear")
 
