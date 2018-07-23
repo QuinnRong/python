@@ -1,3 +1,4 @@
-image/*.jpg
-image/RGB
+image/data_tencent
 image/resize
+image/RGB
+image/invertRB
