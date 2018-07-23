@@ -1,6 +1,8 @@
 from skimage import io, transform
 import numpy as np
 import os
+import math
+import time
 
 def save_txt_nchw(filename, data, N, C, H, W):
     '''
@@ -133,12 +135,92 @@ def shuffle_rgb(filename):
     new_data = np.append(np.append(data[:,:,2], data[:,:,0]), data[:,:,1]).reshape(c, h, w).transpose(1, 2, 0)
     io.imsave("RGB/BRG.jpg", new_data)
 
+def radian(ang):
+    return ang/180*math.pi
+
+def rotate(x, y, ang):
+    sin, cos = math.sin(radian(ang)), math.cos(radian(ang))
+    return x*cos - y*sin, x*sin + y*cos
+
+def img_rotate_forward(filename, ang):
+    '''
+    w => x
+    h => y
+    ang => anticlock
+    '''
+    if not os.path.exists("rotate"):
+        os.mkdir("rotate")
+    sin, cos = math.sin(radian(ang)), math.cos(radian(ang))
+
+    data = io.imread(filename)
+    [H, W, c] = data.shape
+    W0 = math.ceil(abs(H*sin) + abs(W*cos))
+    H0 = math.ceil(abs(H*cos) + abs(W*sin))
+    new_data = np.ones((H0, W0, c), dtype=np.uint8)*255
+    
+    for h in range(H):
+        for w in range(W):
+            w0 = round((w - W/2)*cos - (h - H/2)*sin + W0/2)
+            h0 = round((w - W/2)*sin + (h - H/2)*cos + H0/2)
+            new_data[h0,w0,:] = data[h,w,:]
+
+    io.imsave("rotate/"+str(ang)+"-forward.jpg", new_data)
+
+def interpolation(x, y, data, mode):
+    if mode=="nn":
+        x, y = round(x), round(y)
+        res = data[y,x,:]
+    elif mode=="bilinear":
+        x0, x1 = math.floor(x), math.ceil(x)
+        y0, y1 = math.floor(y), math.ceil(y)
+        py0 = (x-x0)*(data[y0,x1,:] - data[y0,x0,:]) + data[y0,x0,:]
+        py1 = (x-x0)*(data[y1,x1,:] - data[y1,x0,:]) + data[y1,x0,:]
+        res = (y-y0)*(py1 - py0) + py0
+    else:
+        print("mode not valid!")
+        exit()
+    return res
+
+def img_rotate_backward(filename, ang, mode):
+    '''
+    w => x
+    h => y
+    ang => anticlock
+    '''
+    if not os.path.exists("rotate"):
+        os.mkdir("rotate")
+    sin, cos = math.sin(radian(ang)), math.cos(radian(ang))
+
+    data = io.imread(filename).astype(float)    # float is importent for interpolation!!!
+    [H, W, c] = data.shape
+    print("input image size: h=%d, w=%d" % (H, W))
+    W0 = math.ceil(abs(H*sin) + abs(W*cos))
+    H0 = math.ceil(abs(H*cos) + abs(W*sin))
+    print("output image size: h=%d, w=%d" % (H0, W0))
+    # new_data = np.ones((H0, W0, c), dtype=np.uint8)*255
+    new_data = np.ones((H0, W0, c), dtype=np.uint8)*255
+    
+    time_start = time.time()
+    for h0 in range(H0):
+        for w0 in range(W0):
+            w =(w0 - W0/2)*cos + (h0 - H0/2)*sin + W/2
+            h = -(w0 - W0/2)*sin + (h0 - H0/2)*cos + H/2
+            if w>0 and w<(W - 1) and h>0 and h<(H - 1):
+                new_data[h0,w0,:] = interpolation(w, h, data, mode)
+    time_end = time.time()
+    print("time cost: %.2f" % (time_end - time_start))
+    io.imsave("rotate/"+str(ang)+"-backward-"+mode+".jpg", new_data)
+
 def main():
-    txt2img("float")
-    txt2img("int")
-    img2txt("1200-1920")
-    resize("1200-1920.jpg", 480, 640)
-    shuffle_rgb("1200-1920.jpg")
+    # txt2img("float")
+    # txt2img("int")
+    # img2txt("1200-1920")
+    # resize("1200-1920.jpg", 480, 640)
+    # shuffle_rgb("1200-1920.jpg")
+    # img_rotate_forward("1200-1920.jpg", 30)
+    # img_rotate_forward("1200-1920.jpg", -30)
+    img_rotate_backward("Lenna.jpg", 30, "nn")
+    img_rotate_backward("Lenna.jpg", 30, "bilinear")
 
 if __name__ == '__main__':
     main()
