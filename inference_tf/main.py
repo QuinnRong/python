@@ -5,12 +5,12 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 import tensorflow as tf
 
-def loadData(fileName, data):
+def load_feature(fileName, data):
     '''
     input: txt file
     format:
-    [0,0,0] -134.75
-    [1,0,0] -79.75
+    [0,0,0] val
+    [1,0,0] val
     output: a list of values
     '''
     with open(fileName) as f:
@@ -37,14 +37,14 @@ def cos_distance(file1, file2):
     '''
     input: two files
     format:
-    [0,0,0] -134.75
-    [1,0,0] -79.75
+    [0,0,0] val
+    [1,0,0] val
     output: cos distance
     '''
     data_1 = []
-    loadData(file1, data_1)
+    load_feature(file1, data_1)
     data_2 = []
-    loadData(file2, data_2)
+    load_feature(file2, data_2)
     print("cos diatance is:", cal_cos_distance(data_1, data_2))
 
 def load_txt_nchw(filename):
@@ -80,7 +80,41 @@ def load_txt_nchw(filename):
         print("n*c*h*w = %d, len(data) = %d" % (n*c*h*w, len(data)))
         exit()
 
-def run(input_list, output_list, model_file, invert=False, normalize=True):
+def run_tf(sess, input_x, output_y, input_file, output_file, invert, normalize):
+    '''
+    nchw => nhwc (=> invert to RGB) (=> normalize)
+    output format:
+    [0,0,0] val
+    [1,0,0] val
+    '''
+    data = []
+    print("input:", input_file)
+    data.append(load_txt_nchw("input/" + input_file))
+    # convert to tensorflow format:
+    # nchw to nhwc
+    data = np.array(data).transpose(0, 2, 3, 1).astype(np.float32)
+    if invert:
+        print("RGB to BGR...")
+        [n, h, w, c] = data.shape
+        data = np.append(np.append(data[:,:,:,2], data[:,:,:,1]), data[:,:,:,0]).reshape(n, c, h, w).transpose(0, 2, 3, 1)
+        print(data.shape)
+    if normalize:
+        print("normalize...")
+        data = data / 255.0
+
+    output = sess.run(output_y.name, feed_dict={input_x.name:data})
+    print("output shape:", output.shape)
+    print(output)
+
+    print("output:", output_file)
+    f = open("output/" + output_file, 'w')
+    output = output.reshape((-1,))
+    for idx in range(len(output)):
+        f.write("[%d,%d,%d] %s" % (idx, 0, 0, str(output[idx])+"\n"))
+    f.close()
+    print()
+
+def run(input_list, output_list, model_file, invert=False, normalize=False):
     '''
     input_file: txt data(int)
     n c h w
@@ -122,32 +156,7 @@ def run(input_list, output_list, model_file, invert=False, normalize=True):
         print("output tensor name:", output_y.name)
 
         for i in range(len(input_list)):
-            data = []
-            print("input:", input_list[i])
-            data.append(load_txt_nchw("input/" + input_list[i]))
-            # convert to tensorflow format:
-            # nchw to nhwc
-            data = np.array(data).transpose(0, 2, 3, 1).astype(np.float32)
-            if invert:
-                print("RGB to BGR...")
-                [n, h, w, c] = data.shape
-                data = np.append(np.append(data[:,:,:,2], data[:,:,:,1]), data[:,:,:,0]).reshape(n, c, h, w).transpose(0, 2, 3, 1)
-                print(data.shape)
-            if normalize:
-                print("normalize...")
-                data = data / 255.0
-
-            output = sess.run(output_y.name, feed_dict={input_x.name:data})
-            print("output shape:", output.shape)
-            print(output)
-
-            print("output:", output_list[i])
-            f = open("output/" + output_list[i], 'w')
-            output = output.reshape((-1,))
-            for idx in range(len(output)):
-                f.write("[%d,%d,%d] %s" % (idx, 0, 0, str(output[idx])+"\n"))
-            f.close()
-            print()
+            run_tf(sess, input_x, output_y, input_list[i], output_list[i], invert, normalize)
 
 def run_10_files():
     input_list = []
@@ -155,7 +164,7 @@ def run_10_files():
     for i in range(1, 11):
         input_list.append(str(i)+".txt")
         output_list.append("output_"+str(i)+".txt")
-    run(input_list, output_list, "./movidius_model/extract_inference", True)
+    run(input_list, output_list, "./movidius_model/extract_inference", True, True)
 
 def main():
     run_10_files()
