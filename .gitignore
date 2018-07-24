@@ -3,3 +3,4 @@ image/resize
 image/RGB
 image/rotate
 image/invertRB
+inference_tf/input
