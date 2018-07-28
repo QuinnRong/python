@@ -4,3 +4,4 @@ image/RGB
 image/rotate
 image/invertRB
 inference_tf/input
+*.ipynb_checkpoints
