@@ -83,19 +83,6 @@ def img2txt(name):
     [h, w, c] = data.shape
     save_txt_nchw("data/"+name+".txt", data, 1, c, h, w)
 
-def resize(filename, H, W):
-    '''
-    input: an image
-    output: a folder named resize containing resized image and txt data(uint8)
-    '''
-    if not os.path.exists("resize"):
-        os.mkdir("resize")
-    data = io.imread("data/"+filename)
-    [h, w, c] = data.shape
-    new_data = transform.resize(data,(H, W), mode='reflect', preserve_range=True).astype(np.uint8)
-    save_txt_nchw("resize/"+str(H)+"-"+str(W)+".txt", new_data, 1, c, H, W)
-    io.imsave("resize/"+str(H)+"-"+str(W)+".jpg", new_data)
-
 def shuffle_rgb(filename):
     '''
     input: an image
@@ -202,13 +189,37 @@ def img_rotate_backward(filename, ang, mode):
     time_start = time.time()
     for h0 in range(H0):
         for w0 in range(W0):
-            w =(w0 - W0/2)*cos + (h0 - H0/2)*sin + W/2
+            w = (w0 - W0/2)*cos + (h0 - H0/2)*sin + W/2
             h = -(w0 - W0/2)*sin + (h0 - H0/2)*cos + H/2
             if w>0 and w<(W - 1) and h>0 and h<(H - 1):
                 new_data[h0,w0,:] = interpolation(w, h, data, mode)
     time_end = time.time()
     print("time cost: %.2f" % (time_end - time_start))
     io.imsave("rotate/"+str(ang)+"-backward-"+mode+".jpg", new_data)
+
+def resize(filename, H0, W0, mode):
+    '''
+    input: an image
+    output: a folder named resize containing resized image and txt data(uint8)
+    '''
+    if not os.path.exists("resize"):
+        os.mkdir("resize")
+    data = io.imread("data/"+filename)
+    [H, W, c] = data.shape
+    # new_data = transform.resize(data,(H, W), mode='reflect', preserve_range=True).astype(np.uint8)
+    new_data = np.ones((H0, W0, c), dtype=np.uint8)*255
+
+    time_start = time.time()
+    for h0 in range(H0):
+        for w0 in range(W0):
+            h = 1.0*H/H0*h0
+            w = 1.0*W/W0*w0
+            if w>0 and w<(W - 1) and h>0 and h<(H - 1):
+                new_data[h0,w0,:] = interpolation(w, h, data, mode)
+    time_end = time.time()
+    print("time cost: %.2f" % (time_end - time_start))
+    save_txt_nchw("resize/"+str(H0)+"-"+str(W0)+".txt", new_data, 1, c, H0, W0)
+    io.imsave("resize/"+str(H0)+"-"+str(W0)+".jpg", new_data)
 
 def invertRB(filename):
     '''
@@ -253,11 +264,11 @@ def txt_equal(file1, file2):
 def main():
     img2txt("Lenna")
     txt2img("Lenna")
-    resize("Lenna.jpg", 480, 640)
+    resize("Lenna.jpg", 240, 320, "nn")
     invertRB("Lenna.txt")
     shuffle_rgb("Lenna.jpg")
     img_rotate_backward("Lenna.jpg", 30, "nn")
-    img_rotate_backward("Lenna.jpg", 30, "bilinear")
+    img_rotate_backward("Lenna.jpg", 40, "bilinear")
 
 if __name__ == '__main__':
     main()
